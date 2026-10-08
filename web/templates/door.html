@@ -1,0 +1,75 @@
+{{define "door"}}<!doctype html>
+<html lang="ru">
+<head>
+{{template "head"}}
+<title>Вход — гости</title>
+</head>
+<body class="door">
+<header class="bar">
+  <input id="q" class="search" type="search" name="q"
+         placeholder="Фамилия или имя гостя"
+         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+         enterkeyhint="search" autofocus
+         hx-get="/search"
+         hx-trigger="input changed delay:300ms, search"
+         hx-target="#results"
+         hx-sync="this:replace">
+</header>
+<main id="results" aria-live="polite">
+{{template "results" .}}
+</main>
+<div id="toast" class="toast" hidden></div>
+</body>
+</html>
+{{end}}
+
+{{define "results"}}
+{{if not .Query}}
+  <p class="hint">Начните вводить фамилию или имя гостя</p>
+{{else if not .Guests}}
+  <p class="hint">Никого не найдено по запросу «{{.Query}}»</p>
+{{else}}
+  {{range .Guests}}{{template "row" .}}{{end}}
+  {{if .Truncated}}<p class="hint">Показаны первые {{len .Guests}}, уточните запрос</p>{{end}}
+{{end}}
+{{end}}
+
+{{define "row"}}
+<div class="guest{{if eq .Priority "vip"}} vip{{end}}">
+  <div class="name">
+    <span class="surname">{{.Surname}}</span>
+    <span class="given">{{.FirstName}} {{.Patronymic}}</span>
+    {{if eq .Priority "vip"}}<span class="badge">VIP</span>{{end}}
+  </div>
+  {{template "state" .}}
+</div>
+{{end}}
+
+{{define "state"}}
+<div class="state">
+  <fieldset class="controls">
+    <label class="box">
+      <input type="checkbox"{{if .CheckedIn}} checked{{end}}
+             hx-put="/guests/{{.ID}}/checkin" hx-vals='{{.CameVals}}'
+             hx-target="closest .state" hx-swap="outerHTML"
+             hx-disabled-elt="closest fieldset" hx-indicator="closest .state">
+      <span>Пришёл</span>
+    </label>
+    <label class="box">
+      <input type="checkbox"{{if .PlusOne}} checked{{end}}
+             hx-put="/guests/{{.ID}}/checkin" hx-vals='{{.PlusVals}}'
+             hx-target="closest .state" hx-swap="outerHTML"
+             hx-disabled-elt="closest fieldset" hx-indicator="closest .state">
+      <span>+1</span>
+    </label>
+    <span class="cog" aria-hidden="true">⚙</span>
+  </fieldset>
+  <p class="msg{{with .MsgClass}} {{.}}{{end}}">{{.Msg}}</p>
+</div>
+{{end}}
+
+{{define "state-gone"}}
+<div class="state">
+  <p class="msg warn">Гостя больше нет в списке</p>
+</div>
+{{end}}

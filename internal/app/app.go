@@ -9,7 +9,8 @@ import (
 
 	"checkin/internal/config"
 	"checkin/migrations"
-	// "checkin/internal/repository"
+	"checkin/internal/repository"
+	"checkin/internal/transport/httpapi"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -35,16 +36,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	slog.Info("migrations applied", "count", len(results))
-	// repo := repository.New(pool)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
+	repo := repository.New(pool)
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: mux,
+		Handler: httpapi.New(repo, cfg.AdminPassword).Routes(),
 		ReadTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)

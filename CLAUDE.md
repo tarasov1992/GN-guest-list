@@ -5,7 +5,7 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 ## Working style
 
 - Design is discussed before code. Go step by step; don't jump ahead to large code dumps.
-- The user writes all the code. Claude reviews and discusses design, and does not write code into the project or run the project's code.
+- The user writes the code. Claude reviews and discusses design, and writes code into the project only when explicitly asked for a specific piece. Claude does not run the project's code.
 - Prefer the simplest thing that is correct at this scale (~500 guests, a few check-ins per minute, short peaks of 1–2/sec).
 
 ## Stack
@@ -15,8 +15,8 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 - **goose** for migrations: plain SQL files in `migrations/`, embedded and run at startup
 - **excelize** (`github.com/xuri/excelize/v2`) for reading the xlsx
 - **No Redis**, deliberately. At 500 rows Postgres handles search, counters and check-ins with plenty of headroom; Redis would only add a second source of state and cache-invalidation bugs.
-- **No gRPC.** Plain JSON over HTTP; the browser frontend can't call gRPC directly.
-- Plain HTML/CSS/JS frontend served by the Go binary
+- **No gRPC.** Plain HTTP; the browser can't call gRPC directly.
+- **Frontend: server-rendered `html/template` + htmx**, so the frontend stays in Go. Handlers return HTML pages and fragments (search rows, the updated row after a check-in) instead of JSON. htmx is served from the binary, never from a CDN (venue Wi-Fi is unreliable). The only hand-written JavaScript is reverting a checkbox on error or timeout. The JSON handlers are removed once the HTML ones exist.
 - Docker Compose (app + Postgres) for deployment to an Ubuntu VPS (AWS EC2)
 - Single instance, so no distributed locking
 
@@ -27,10 +27,11 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 - `internal/guestfile`: `Parse(io.Reader) ([]guest.Guest, error)`, the xlsx parser
 - `internal/ydimport`: Yandex Disk client and the sync loop
 - `internal/repository`: Postgres access
-- `internal/transport/http`: HTTP handlers
+- `internal/transport/httpapi`: HTTP handlers, routes and the `requireAdmin` basic-auth middleware
 - `internal/app`: wiring, startup (migrations, server, sync loop) and shutdown
-- `internal/config`: configuration
-- `migrations/`: goose SQL migrations
+- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters)
+- `migrations/`: goose SQL migrations, embedded via `migrations.FS`
+- `web/`: templates and static files (htmx), embedded via `web.FS`
 
 ## Source data
 
@@ -58,6 +59,8 @@ The real file contains guests' personal data (phones, emails) and must never be 
 
 ## Sync worker
 
+The file is shared by **public link**, so the worker uses Yandex Disk's public-resources API (`cloud-api.yandex.net/v1/disk/public/resources`) with no auth. The link goes in `.env` and is treated as a secret.
+
 1. Periodically (configurable interval, default hourly) fetch the file's **metadata** via the Yandex Disk API (`md5`/`sha256`, `modified`).
 2. Download only if the hash differs from the last stored hash.
 3. Parse and **upsert** all rows in one transaction (`INSERT ... ON CONFLICT (full_name_key) DO UPDATE`). Idempotent, safe to re-run.
@@ -68,7 +71,7 @@ Downloader and importer can be one loop; no queue is needed between them.
 
 ## Guest identity
 
-- No unique ID column has been confirmed (see open question 2), so the key is a normalized full name stored as `full_name_key` with a unique index.
+- No unique ID column has been confirmed (see open question 1), so the key is a normalized full name stored as `full_name_key` with a unique index.
 - The key is surname, first name and patronymic joined in that fixed order, then normalized.
 - Normalization (`guest.NormalizeName`), in order: Unicode NFC; lowercase; `ё` → `е`; dash variants → `-`; zero-width characters, BOM and soft hyphen removed; Latin lookalike letters → Cyrillic; whitespace collapsed to single spaces; spaces around `-` removed.
 - The same normalization is used for search.
@@ -97,7 +100,14 @@ One `guests` table (see `migrations/00001_init.sql`):
 - Checking in a removed or nonexistent guest returns "not found".
 - UI: the control is **disabled while the request is in flight**, with a spinner; the success message shows only after commit. On error or timeout (~5s), revert to the previous state and show an error with a retry.
 - Undo is the same endpoint with `checked_in: false` (which also clears `plus_one`).
-- Valid states: Not here (`false/false`), Came (`true/false`), Came +1 (`true/true`). Which control shows them is open question 4.
+- Valid states: Not here (`false/false`), Came (`true/false`), Came +1 (`true/true`).
+- Control: two checkboxes per row, **Came** and **+1**. Every tap sends the full desired state.
+  - Ticking +1 when Came isn't ticked sends `{true, true}` and ticks both, so a couple arriving together is one tap.
+  - Unticking Came clears +1 as well (`{false, false}`).
+  - Unticking +1 keeps Came (`{true, false}`); ticking +1 later covers a +1 who arrives after the guest.
+  - While a request is in flight, that row's checkboxes are disabled and show a spinner (cog). Other rows stay usable.
+  - If `previous` equals the sent state, show "already checked in". If `previous` differs from what the row showed before the tap, show "updated on another device".
+- Known edge case: a stale row can overwrite another device's change (e.g. remove a +1). The window is the few seconds between a search and a tap, and the "updated on another device" note makes it visible. A compare-and-set (`409` on mismatch) is the full fix, only worth it with many door devices.
 
 ## Admin panel
 
@@ -108,11 +118,9 @@ One `guests` table (see `migrations/00001_init.sql`):
 
 ## Open questions
 
-1. Is the Yandex Disk file private (OAuth token, which expires) or shared via public link (public-resources API, no auth)?
-2. Is the `№` column unique and stable across edits and re-sorting? If so, it could replace the full name as the identity key. Its values are out of order in the draft, which suggests it moves with each row.
-3. Does a +1 count as regular, or inherit the host's priority?
-4. Which +1 UI: segmented control, checkbox + toggle, or two buttons?
-5. How many door devices will check people in at once?
+1. Is the `№` column unique and stable across edits and re-sorting? If so, it could replace the full name as the identity key. Its values are out of order in the draft, which suggests it moves with each row.
+2. Does a +1 count as regular, or inherit the host's priority? (The admin counters report +1s separately, so this doesn't block anything.)
+3. How many door devices will check people in at once?
 
 ## Deployment notes
 

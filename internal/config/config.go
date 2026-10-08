@@ -6,8 +6,9 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	HTTPAddr    string
+	DatabaseURL   string
+	HTTPAddr      string
+	AdminPassword string
 }
 
 func Load() (Config, error) {
@@ -20,6 +21,10 @@ func Load() (Config, error) {
 	}
 	if v := os.Getenv("HTTP_ADDR"); v != "" {
 		cfg.HTTPAddr = v
+	}
+	cfg.AdminPassword = os.Getenv("ADMIN_PASSWORD")
+	if len(cfg.AdminPassword) < 16 {
+		errs = append(errs, errors.New("ADMIN_PASSWORD must be at least 16 characters"))
 	}
 
 	if len(errs) > 0 {

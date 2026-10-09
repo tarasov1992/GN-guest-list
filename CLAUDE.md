@@ -17,7 +17,7 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 - **No Redis**, deliberately. At 500 rows Postgres handles search, counters and check-ins with plenty of headroom; Redis would only add a second source of state and cache-invalidation bugs.
 - **No gRPC.** Plain HTTP; the browser can't call gRPC directly.
 - **Frontend: server-rendered `html/template` + htmx**, so the frontend stays in Go. Handlers return HTML pages and fragments (search rows, the updated row after a check-in) instead of JSON. htmx is served from the binary, never from a CDN (venue Wi-Fi is unreliable). The only hand-written JavaScript is reverting a checkbox on error or timeout. The JSON handlers are removed once the HTML ones exist.
-- Docker Compose (app + Postgres) for deployment to an Ubuntu VPS (AWS EC2)
+- Docker Compose (Caddy + app + Postgres) for deployment to an Ubuntu VPS (not AWS; provider-agnostic)
 - Single instance, so no distributed locking
 
 ## Layout
@@ -115,7 +115,8 @@ One `guests` table (see `migrations/00001_init.sql`):
 
 - Full searchable guest list with priority and check-in state
 - Counters computed on read from Postgres: total regular, total VIP, total overall (including +1s)
-- Protected (basic auth or a long secret token), since it exposes everyone's full name. The door UI has no auth; access is controlled by distributing the link.
+- Protected by basic auth (username `admin`, `ADMIN_PASSWORD`), since it exposes everyone's full name.
+- The door UI has no password. It lives under a secret path, `/d/<DOOR_SECRET>/`, and so do its search and check-in endpoints (the templates use relative URLs). `/` returns 404, so scanners hitting the IP find nothing. Staff get the full link.
 - Live updates optional (polling or SSE)
 
 ## Open questions
@@ -126,4 +127,6 @@ One `guests` table (see `migrations/00001_init.sql`):
 
 ## Deployment notes
 
-- AWS EC2: the app port must be opened in the instance's Security Group (inbound rule, Custom TCP, source `0.0.0.0/0`).
+- No domain: Caddy serves `SITE_ADDRESS`, which on the server is the VPS IP as an sslip.io name (e.g. `203-0-113-7.sslip.io`). Caddy gets and renews the HTTPS certificate automatically. Locally `SITE_ADDRESS=:80` (plain HTTP).
+- Only Caddy publishes ports (80, 443, 443/udp). The app and Postgres are reachable only on the Compose network. Open 80 and 443 (and SSH) in the provider's firewall.
+- Basic auth must only ever go over HTTPS on the server.

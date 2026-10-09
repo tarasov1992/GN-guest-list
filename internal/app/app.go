@@ -56,7 +56,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	server := &http.Server{
 		Addr:        cfg.HTTPAddr,
-		Handler:     httpapi.New(repo, worker, cfg.AdminPassword).Routes(),
+		Handler:     httpapi.New(repo, worker, cfg.AdminPassword, cfg.DoorSecret).Routes(),
 		ReadTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)

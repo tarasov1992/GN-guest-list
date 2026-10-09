@@ -13,7 +13,7 @@
          placeholder="Фамилия или имя гостя"
          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
          enterkeyhint="search" autofocus
-         hx-get="/search"
+         hx-get="search"
          hx-trigger="input changed delay:300ms, search"
          hx-target="#results"
          hx-sync="this:replace">
@@ -53,14 +53,14 @@
   <fieldset class="controls">
     <label class="box">
       <input type="checkbox"{{if .CheckedIn}} checked{{end}}
-             hx-put="/guests/{{.ID}}/checkin" hx-vals='{{.CameVals}}'
+             hx-put="guests/{{.ID}}/checkin" hx-vals='{{.CameVals}}'
              hx-target="closest .state" hx-swap="outerHTML"
              hx-disabled-elt="closest fieldset" hx-indicator="closest .state">
       <span>Пришёл</span>
     </label>
     <label class="box">
       <input type="checkbox"{{if .PlusOne}} checked{{end}}
-             hx-put="/guests/{{.ID}}/checkin" hx-vals='{{.PlusVals}}'
+             hx-put="guests/{{.ID}}/checkin" hx-vals='{{.PlusVals}}'
              hx-target="closest .state" hx-swap="outerHTML"
              hx-disabled-elt="closest fieldset" hx-indicator="closest .state">
       <span>+1</span>

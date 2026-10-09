@@ -24,14 +24,16 @@ type Handler struct {
 	repo          *repository.Repository
 	worker        *ydimport.Worker
 	adminPassword string
+	doorSecret    string
 	tmpl          *template.Template
 }
 
-func New(repo *repository.Repository, worker *ydimport.Worker, adminPassword string) *Handler {
+func New(repo *repository.Repository, worker *ydimport.Worker, adminPassword, doorSecret string) *Handler {
 	return &Handler{
 		repo:          repo,
 		worker:        worker,
 		adminPassword: adminPassword,
+		doorSecret:    doorSecret,
 		tmpl:          template.Must(template.ParseFS(web.FS, "templates/*.html")),
 	}
 }
@@ -42,9 +44,13 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", h.healthz)
 	mux.Handle("GET /static/", http.FileServerFS(web.FS))
 
-	mux.HandleFunc("GET /{$}", h.doorPage)
-	mux.HandleFunc("GET /search", h.search)
-	mux.HandleFunc("PUT /guests/{id}/checkin", h.checkin)
+	// The door lives under a secret path, and so does everything it calls:
+	// the templates use relative URLs ("search", "guests/…"), which resolve under it.
+	door := "/d/" + h.doorSecret
+	mux.Handle("GET "+door, http.RedirectHandler(door+"/", http.StatusMovedPermanently))
+	mux.HandleFunc("GET "+door+"/{$}", h.doorPage)
+	mux.HandleFunc("GET "+door+"/search", h.search)
+	mux.HandleFunc("PUT "+door+"/guests/{id}/checkin", h.checkin)
 
 	mux.Handle("GET /admin", h.requireAdmin(http.HandlerFunc(h.adminPage)))
 	mux.Handle("GET /admin/overview", h.requireAdmin(http.HandlerFunc(h.adminOverview)))

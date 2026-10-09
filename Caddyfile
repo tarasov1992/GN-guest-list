@@ -1,0 +1,7 @@
+# SITE_ADDRESS comes from .env:
+#   server: the VPS hostname, e.g. 203-0-113-7.sslip.io; Caddy gets an HTTPS certificate automatically
+#   local:  :80 for plain HTTP on any hostname
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy app:8080
+}

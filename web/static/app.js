@@ -45,6 +45,16 @@
     });
   });
 
+  // Door page: give the centred search bar a backdrop once it is pinned to the top.
+  var bar = document.querySelector(".bar-center");
+  if (bar && "IntersectionObserver" in window) {
+    var sentinel = document.createElement("div");
+    bar.parentNode.insertBefore(sentinel, bar);
+    new IntersectionObserver(function (entries) {
+      bar.classList.toggle("stuck", !entries[0].isIntersecting);
+    }).observe(sentinel);
+  }
+
   // Admin page: live filter over the polled list, and a "last updated" stamp.
   function words(s) {
     return s.toLowerCase().replace(/ё/g, "е").split(/\s+/).filter(Boolean);
@@ -71,7 +81,12 @@
     if (e.target && e.target.id === "filter") applyFilter();
   });
 
+  var syncMsgTimer;
   document.addEventListener("htmx:afterSwap", function (e) {
+    if (e.detail.target && e.detail.target.id === "sync-msg") {
+      clearTimeout(syncMsgTimer);
+      syncMsgTimer = setTimeout(function () { e.detail.target.textContent = ""; }, 8000);
+    }
     if (e.detail.target && e.detail.target.id === "overview") {
       applyFilter();
       setUpdated("обновлено " + new Date().toLocaleTimeString("ru-RU"), false);

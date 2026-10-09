@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata" // embedded time zone data, so TZ=Europe/Moscow works in any base image
 
 	"checkin/internal/app"
 	"checkin/internal/config"

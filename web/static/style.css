@@ -1,46 +1,51 @@
+/* Colours taken from the invitation: deep teal background with a lighter
+   misty centre, gold headings, off-white text. One theme, always dark. */
 :root {
-  --bg: #f6f6f4;
-  --surface: #ffffff;
-  --text: #1c1c1a;
-  --muted: #6b6b66;
-  --border: #e2e1dc;
-  --accent: #2f6fd6;
-  --vip: #b7791f;
-  --vip-bg: #fdf3e1;
-  --ok: #2e7d4f;
-  --warn: #9a6400;
-  --warn-bg: #fff4dc;
-  --error: #b3261e;
-  --error-bg: #fde8e6;
-  --info-bg: #e8f0fd;
-  color-scheme: light;
+  --bg: #0f2b2d;
+  --bg-edge: #0b2124;
+  --bg-mist: #1d4447;
+  --bar: rgba(11, 33, 36, 0.92);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-solid: #163739;
+  --text: #eef2f0;
+  --muted: #9db4b1;
+  --border: rgba(255, 255, 255, 0.13);
+  --accent: #d4b483;
+  --accent-text: #10282a;
+  --vip: #d4b483;
+  --vip-bg: rgba(212, 180, 131, 0.16);
+  --ok: #7fd3a0;
+  --warn: #e9c27a;
+  --warn-bg: rgba(233, 194, 122, 0.14);
+  --error: #f4948c;
+  --error-bg: rgba(244, 148, 140, 0.14);
+  --info-bg: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141413;
-    --surface: #1e1e1c;
-    --text: #ececea;
-    --muted: #9b9b95;
-    --border: #33332f;
-    --accent: #6d9eef;
-    --vip: #e0a84a;
-    --vip-bg: #33280f;
-    --ok: #5fbf86;
-    --warn: #e8b04a;
-    --warn-bg: #33280f;
-    --error: #f2857d;
-    --error-bg: #3a1614;
-    --info-bg: #17243a;
-    color-scheme: dark;
-  }
+/* Condensed high-contrast serif, close to the invitation's title lettering.
+   Oranienbaum, SIL Open Font License; Cyrillic subset, self-hosted. */
+@font-face {
+  font-family: "Oranienbaum";
+  src: url("/static/fonts/oranienbaum-cyrillic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 * { box-sizing: border-box; }
 
+html {
+  background: var(--bg-edge);
+}
+
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 35%, var(--bg-mist) 0%, var(--bg) 50%, var(--bg-edge) 100%)
+    no-repeat;
+  background-color: var(--bg-edge);
   color: var(--text);
   font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-text-size-adjust: 100%;
@@ -56,7 +61,9 @@ body {
   gap: 12px;
   padding: 12px 16px;
   padding-top: max(12px, env(safe-area-inset-top));
-  background: var(--bg);
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -67,12 +74,53 @@ body {
   padding: 0 14px;
   font-size: 18px; /* 16px+ keeps iOS from zooming in on focus */
   color: var(--text);
-  background: var(--surface);
+  background: var(--surface-solid);
   border: 1px solid var(--border);
   border-radius: 10px;
   outline: none;
 }
+.search::placeholder { color: var(--muted); }
 .search:focus { border-color: var(--accent); }
+
+/* Door page: title above a centred, narrower search bar */
+.hero {
+  padding: max(28px, env(safe-area-inset-top)) 24px 8px;
+  text-align: center;
+}
+.title {
+  margin: 0;
+  font-family: "Oranienbaum", "Times New Roman", serif;
+  font-weight: 400;
+  font-size: clamp(36px, 10vw, 64px);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.bar-center {
+  justify-content: center;
+  padding: 12px 24px;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom: 0;
+}
+.bar-center .search {
+  flex: 0 1 520px;
+}
+/* Once the page scrolls, the pinned bar gets a backdrop so results don't show through */
+.door main {
+  max-width: 568px; /* the search bar's 520px plus its 24px side padding */
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.door .bar-center.stuck {
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
 
 main {
   padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
@@ -113,7 +161,7 @@ main {
   border-radius: 999px;
   vertical-align: 2px;
 }
-.badge.muted { color: var(--muted); background: var(--bg); }
+.badge.muted { color: var(--muted); background: var(--info-bg); }
 
 .controls {
   display: flex;
@@ -183,7 +231,8 @@ fieldset:disabled .box { cursor: progress; }
   bottom: calc(16px + env(safe-area-inset-bottom));
   padding: 12px 14px;
   color: var(--error);
-  background: var(--error-bg);
+  background: #3a1f20;
+  border: 1px solid var(--error);
   border-radius: 10px;
   text-align: center;
 }
@@ -192,6 +241,48 @@ fieldset:disabled .box { cursor: progress; }
 /* Admin */
 .updated { font-size: 14px; color: var(--muted); white-space: nowrap; }
 .updated.error { color: var(--error); }
+
+.subbar {
+  max-width: 760px;
+  margin: 8px auto 0;
+  padding: 0 16px;
+  min-height: 1.4em;
+}
+
+.btn {
+  flex: none;
+  height: 48px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.btn:disabled { opacity: 0.6; cursor: progress; }
+
+.sync {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  font-size: 15px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.sync.failed {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: transparent;
+}
+.sync pre {
+  margin: 8px 0 0;
+  font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .counters {
   display: grid;

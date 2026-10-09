@@ -16,6 +16,8 @@ const (
 	colFirstName  = "Имя"
 	colPatronymic = "Отчество"
 	colPriority   = "Приоритет"
+	// colPriorityAlt is the same column under the name the live file uses.
+	colPriorityAlt = "Статус"
 )
 
 func Parse(r io.Reader) ([]guest.Guest, error) {
@@ -41,6 +43,11 @@ func Parse(r io.Reader) ([]guest.Guest, error) {
 	cols := make(map[string]int)
 	for i, col := range rows[8] {
 		cols[strings.TrimSpace(col)] = i
+	}
+	if _, ok := cols[colPriority]; !ok {
+		if i, ok := cols[colPriorityAlt]; ok {
+			cols[colPriority] = i
+		}
 	}
 	target := []string{
 		colSurname,

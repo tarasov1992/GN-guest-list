@@ -5,7 +5,10 @@
 <title>Вход — гости</title>
 </head>
 <body class="door">
-<header class="bar">
+<header class="hero">
+  <h1 class="title">Под Двуглавым Орлом</h1>
+</header>
+<div class="bar bar-center">
   <input id="q" class="search" type="search" name="q"
          placeholder="Фамилия или имя гостя"
          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
@@ -14,7 +17,7 @@
          hx-trigger="input changed delay:300ms, search"
          hx-target="#results"
          hx-sync="this:replace">
-</header>
+</div>
 <main id="results" aria-live="polite">
 {{template "results" .}}
 </main>

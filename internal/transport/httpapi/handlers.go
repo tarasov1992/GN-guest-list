@@ -13,6 +13,7 @@ import (
 
 	"checkin/internal/guest"
 	"checkin/internal/repository"
+	"checkin/internal/ydimport"
 	"checkin/web"
 )
 
@@ -21,13 +22,15 @@ const searchLimit = 20
 
 type Handler struct {
 	repo          *repository.Repository
+	worker        *ydimport.Worker
 	adminPassword string
 	tmpl          *template.Template
 }
 
-func New(repo *repository.Repository, adminPassword string) *Handler {
+func New(repo *repository.Repository, worker *ydimport.Worker, adminPassword string) *Handler {
 	return &Handler{
 		repo:          repo,
+		worker:        worker,
 		adminPassword: adminPassword,
 		tmpl:          template.Must(template.ParseFS(web.FS, "templates/*.html")),
 	}
@@ -45,6 +48,7 @@ func (h *Handler) Routes() http.Handler {
 
 	mux.Handle("GET /admin", h.requireAdmin(http.HandlerFunc(h.adminPage)))
 	mux.Handle("GET /admin/overview", h.requireAdmin(http.HandlerFunc(h.adminOverview)))
+	mux.Handle("POST /admin/sync", h.requireAdmin(http.HandlerFunc(h.adminSync)))
 	return mux
 }
 
@@ -198,6 +202,7 @@ type overviewView struct {
 	C       repository.Counters
 	Present int64
 	Guests  []adminRow
+	Sync    ydimport.Status
 }
 
 func (h *Handler) adminPage(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +230,14 @@ func (h *Handler) adminOverview(w http.ResponseWriter, r *http.Request) {
 		C:       counters,
 		Present: counters.ArrivedRegular + counters.ArrivedVIP + counters.PlusOnes,
 		Guests:  rows,
+		Sync:    h.worker.Status(),
 	})
+}
+
+// adminSync only queues a sync; the overview poll shows its progress and result.
+func (h *Handler) adminSync(w http.ResponseWriter, r *http.Request) {
+	h.worker.Trigger()
+	h.render(w, "sync-queued", nil)
 }
 
 // render executes into a buffer first, so a template error never sends half a page.

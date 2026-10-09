@@ -29,7 +29,7 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 - `internal/repository`: Postgres access
 - `internal/transport/httpapi`: HTTP handlers, routes and the `requireAdmin` basic-auth middleware
 - `internal/app`: wiring, startup (migrations, server, sync loop) and shutdown
-- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters)
+- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters, `YANDEX_PUBLIC_URL`, `SYNC_INTERVAL` default `1h`). The admin basic-auth username is the fixed `admin`.
 - `migrations/`: goose SQL migrations, embedded via `migrations.FS`
 - `web/`: templates and static files (htmx), embedded via `web.FS`
 
@@ -39,8 +39,8 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 
 Only these columns matter; others are ignored:
 
-- `Фамилия`, `Имя`, `Отчество`, `Приоритет`
-- `Приоритет` values: `VIP` and `Обычный`. They map to `vip` and `regular`.
+- `Фамилия`, `Имя`, `Отчество`, and the priority column, headed `Приоритет` in the draft and `Статус` in the live file. The parser accepts either (exact match after trimming, so `Статус отправки` isn't confused with it).
+- Priority values: `VIP` and `Обычный`. They map to `vip` and `regular`. The live file had 480 guests (127 VIP) on 2026-10-09.
 
 Parse columns **by header name, not position**, so reordered columns don't break the import. Header text is trimmed.
 
@@ -68,6 +68,8 @@ The file is shared by **public link**, so the worker uses Yandex Disk's public-r
 5. The admin panel gets a "sync now" button, and shows the last sync error.
 
 Downloader and importer can be one loop; no queue is needed between them.
+
+Implementation (`internal/ydimport`): `Client` (`Meta`, `Download`) and `Worker`. The worker syncs once at startup, then every `SYNC_INTERVAL`, and on "sync now" (`POST /admin/sync`, which skips the hash check). The last imported hash is kept in memory, so a restart re-imports once (harmless, `Import` is idempotent). A failed sync is logged and shown in the admin panel, and never stops the loop. `app` stops and waits for the worker before closing the pool. The container runs with `TZ=Europe/Moscow`.
 
 ## Guest identity
 

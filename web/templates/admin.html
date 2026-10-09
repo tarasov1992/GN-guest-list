@@ -9,8 +9,10 @@
   <input id="filter" class="search" type="search"
          placeholder="Фильтр по имени"
          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-  <span id="updated" class="updated"></span>
+  <button class="btn" type="button"
+          hx-post="/admin/sync" hx-target="#sync-msg" hx-disabled-elt="this">Синхронизировать</button>
 </header>
+<p class="subbar"><span id="updated" class="updated"></span> <span id="sync-msg" class="updated"></span></p>
 <main id="overview" hx-get="/admin/overview" hx-trigger="load, every 5s" hx-swap="innerHTML">
   <p class="hint">Загрузка…</p>
 </main>
@@ -19,6 +21,23 @@
 {{end}}
 
 {{define "overview"}}
+<section class="sync{{if .Sync.Err}} failed{{end}}">
+  {{if .Sync.Running}}
+    <strong>Синхронизация идёт…</strong>
+  {{else if .Sync.LastRun.IsZero}}
+    Синхронизации ещё не было
+  {{else if .Sync.Err}}
+    <strong>Синхронизация не удалась</strong> в {{.Sync.LastRun.Format "15:04"}}. Данные остались прежними.
+    <pre>{{.Sync.Err}}</pre>
+  {{else if .Sync.Unchanged}}
+    Проверено в {{.Sync.LastRun.Format "15:04"}}: файл не изменился{{with .Sync.Guests}}, в списке {{.}} гостей{{end}}
+  {{else}}
+    Загружено в {{.Sync.LastRun.Format "15:04"}}: {{.Sync.Guests}} гостей
+  {{end}}
+  {{if and .Sync.Err (not .Sync.LastSuccess.IsZero)}}
+    <br><small>Последняя успешная: {{.Sync.LastSuccess.Format "15:04"}}</small>
+  {{end}}
+</section>
 <section class="counters">
   <div class="counter total">
     <span class="num">{{.Present}}</span>
@@ -57,3 +76,5 @@
   </tbody>
 </table>
 {{end}}
+
+{{define "sync-queued"}}синхронизация запущена{{end}}

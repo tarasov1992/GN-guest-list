@@ -3,14 +3,15 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
-	"log/slog"
 
 	"checkin/internal/config"
-	"checkin/migrations"
 	"checkin/internal/repository"
 	"checkin/internal/transport/httpapi"
+	"checkin/internal/ydimport"
+	"checkin/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -37,9 +38,25 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	slog.Info("migrations applied", "count", len(results))
 	repo := repository.New(pool)
+
+	// The worker gets its own cancellable context, so it is stopped and waited for
+	// on every return path, before the deferred pool.Close runs.
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	worker := ydimport.NewWorker(ydimport.NewClient(cfg.YandexPublicURL), repo, cfg.SyncInterval)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		worker.Run(workerCtx)
+	}()
+	defer func() {
+		cancelWorker()
+		<-workerDone
+	}()
+	slog.Info("sync worker started", "interval", cfg.SyncInterval)
+
 	server := &http.Server{
-		Addr:    cfg.HTTPAddr,
-		Handler: httpapi.New(repo, cfg.AdminPassword).Routes(),
+		Addr:        cfg.HTTPAddr,
+		Handler:     httpapi.New(repo, worker, cfg.AdminPassword).Routes(),
 		ReadTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)

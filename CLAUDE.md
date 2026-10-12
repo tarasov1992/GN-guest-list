@@ -25,11 +25,11 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 - `cmd/checkin`: the only binary. The sync loop runs in the same process as a goroutine.
 - `internal/guest`: `Guest`, `Priority`, `NormalizeName`, `FullNameKey`
 - `internal/guestfile`: `Parse(io.Reader) ([]guest.Guest, error)`, the xlsx parser
-- `internal/ydimport`: Yandex Disk client and the sync loop
+- `internal/cloudsync`: the `Source` interface, the Yandex (`YDClient`) and Google (`GDClient`) sources, and the sync `Worker`
 - `internal/repository`: Postgres access
 - `internal/transport/httpapi`: HTTP handlers, routes and the `requireAdmin` basic-auth middleware
 - `internal/app`: wiring, startup (migrations, server, sync loop) and shutdown
-- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters, `DOOR_SECRET`, `YANDEX_PUBLIC_URL` → to become `YANDEX_URL` + `GOOGLE_URL` + `SOURCE`, `SYNC_INTERVAL` default `1h`). The admin basic-auth username is the fixed `admin`.
+- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters, `DOOR_SECRET`, `YANDEX_URL`, `GOOGLE_URL`, `SOURCE` (`YD`/`GD`), `SYNC_INTERVAL` default `1h`). The admin basic-auth username is the fixed `admin`.
 - `migrations/`: goose SQL migrations, embedded via `migrations.FS`
 - `web/`: templates and static files (htmx), embedded via `web.FS`
 
@@ -63,7 +63,7 @@ The file is shared by **public link**, on **Yandex Disk or Google Drive**; no au
 
 - **Yandex:** `disk.yandex.ru/i/…` or `yadi.sk/…` links, via the public-resources API (`cloud-api.yandex.net/v1/disk/public/resources/download`).
 - **Google:** an uploaded `.xlsx` (`drive.google.com/file/d/<ID>/…` → `drive.google.com/uc?export=download&id=<ID>`) or a native Google Sheet (`docs.google.com/spreadsheets/d/<ID>/…` → `…/export?format=xlsx`). An HTML response means the file isn't public; report that clearly.
-- **Configuring and switching the source:** `.env` holds both links (`YANDEX_URL`, `GOOGLE_URL`; at least one required) and the default `SOURCE` (`yandex` | `google`, defaulting to the only link if just one is set). The admin panel switches between the configured sources at runtime; there's no free-form URL field, so the server only ever fetches links from `.env`. The switch is **in memory only**: after a restart the app uses `SOURCE` from `.env` again, and the admin panel says so next to the current source. To make a switch permanent, change `SOURCE` in `.env` too. Switching triggers a sync immediately. No DB table for the source.
+- **Configuring and switching the source:** `.env` holds both links (`YANDEX_URL`, `GOOGLE_URL`; at least one required) and the default `SOURCE` (`YD` | `GD`, constants `cloudsync.SourceYD`/`SourceGD`; defaulting to the only link if just one is set). `config` validates it; `app` builds a `map[string]cloudsync.Source` of the configured sources and passes it with the default to `NewWorker`, which starts with `current = default`. The admin panel switches between the configured sources at runtime; there's no free-form URL field, so the server only ever fetches links from `.env`. The switch is **in memory only**: after a restart the app uses `SOURCE` from `.env` again, and the admin panel says so next to the current source. To make a switch permanent, change `SOURCE` in `.env` too. Switching triggers a sync immediately. No DB table for the source.
 
 Each run:
 
@@ -74,7 +74,7 @@ Each run:
 5. Soft-delete only rows with `source = 'file'` that are missing from the file. Walk-ins are never removed by a sync.
 6. The admin panel has a "sync now" button, and shows the last sync result or error.
 
-Implementation: a `Source` interface (`Fetch(ctx) (io.ReadCloser, error)`) with Yandex and Google implementations, and a `Worker` (`internal/ydimport`, to be renamed now that it isn't Yandex-only). The worker syncs once at startup, then every `SYNC_INTERVAL`, on "sync now" (`POST /admin/sync`, which skips the hash check), and when the source changes. It reads the current source on each run. The last imported hash is kept in memory, so a restart re-imports once (harmless, `Import` is idempotent). A failed sync is logged and shown in the admin panel, and never stops the loop. `app` stops and waits for the worker before closing the pool. The container runs with `TZ=Europe/Moscow`.
+Implementation: a `Source` interface (`Fetch(ctx) (io.ReadCloser, error)`) with Yandex and Google implementations, and a `Worker` (`internal/cloudsync`). The worker syncs once at startup, then every `SYNC_INTERVAL`, on "sync now" (`POST /admin/sync`, which skips the hash check), and when the source changes. It reads the current source on each run. The last imported hash is kept in memory, so a restart re-imports once (harmless, `Import` is idempotent). A failed sync is logged and shown in the admin panel, and never stops the loop. `app` stops and waits for the worker before closing the pool. The container runs with `TZ=Europe/Moscow`.
 
 ## Guest identity
 

@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
+	"checkin/internal/cloudsync"
 	"checkin/internal/guest"
 	"checkin/internal/repository"
-	"checkin/internal/ydimport"
 	"checkin/web"
 )
 
@@ -22,13 +22,13 @@ const searchLimit = 20
 
 type Handler struct {
 	repo          *repository.Repository
-	worker        *ydimport.Worker
+	worker        *cloudsync.Worker
 	adminPassword string
 	doorSecret    string
 	tmpl          *template.Template
 }
 
-func New(repo *repository.Repository, worker *ydimport.Worker, adminPassword, doorSecret string) *Handler {
+func New(repo *repository.Repository, worker *cloudsync.Worker, adminPassword, doorSecret string) *Handler {
 	return &Handler{
 		repo:          repo,
 		worker:        worker,
@@ -208,7 +208,7 @@ type overviewView struct {
 	C       repository.Counters
 	Present int64
 	Guests  []adminRow
-	Sync    ydimport.Status
+	Sync    cloudsync.Status
 }
 
 func (h *Handler) adminPage(w http.ResponseWriter, r *http.Request) {

@@ -1,15 +1,25 @@
 package cloudsync
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
 	"checkin/internal/guest"
 	"checkin/internal/guestfile"
+)
+
+const (
+	SourceYD = "YD"
+	SourceGD = "GD"
 )
 
 // maxFileSize caps how much of the download is read; the real file is ~75 KB.
@@ -20,34 +30,47 @@ type Importer interface {
 }
 
 type Status struct {
-	Running     bool
-	LastRun     time.Time
-	LastSuccess time.Time
-	Unchanged   bool   // the last successful run found the same file
-	Guests      int    // guests in the last imported file
-	Err         string // error of the last run, empty if it succeeded
+	Source        string
+	DefaultSource string
+	Available     []string
+	Running       bool
+	LastRun       time.Time
+	LastSuccess   time.Time
+	Unchanged     bool   // the last successful run found the same file
+	Guests        int    // guests in the last imported file
+	Err           string // error of the last run, empty if it succeeded
 }
 
 type Worker struct {
-	client   *Client
-	importer Importer
-	interval time.Duration
-	trigger  chan struct{}
+	// Set once in NewWorker, never changed afterwards.
+	sources       map[string]Source
+	available     []string // sorted source names, for the admin switch
+	defaultSource string
+	importer      Importer
+	interval      time.Duration
+	trigger       chan struct{}
 
 	// lastHash is only touched by the Run goroutine.
 	lastHash string
 
-	mu     sync.Mutex
-	status Status
+	mu      sync.Mutex // guards current and status
+	current string
+	status  Status
 }
 
-func NewWorker(client *Client, importer Importer, interval time.Duration) *Worker {
-	return &Worker{
-		client:   client,
-		importer: importer,
-		interval: interval,
-		trigger:  make(chan struct{}, 1),
+func NewWorker(sources map[string]Source, defaultSource string, importer Importer, interval time.Duration) (*Worker, error) {
+	if _, ok := sources[defaultSource]; !ok {
+		return nil, fmt.Errorf("default source %q is not configured", defaultSource)
 	}
+	return &Worker{
+		sources:       sources,
+		available:     slices.Sorted(maps.Keys(sources)),
+		defaultSource: defaultSource,
+		current:       defaultSource,
+		importer:      importer,
+		interval:      interval,
+		trigger:       make(chan struct{}, 1),
+	}, nil
 }
 
 // Run syncs once right away, then on every tick and on every Trigger,
@@ -80,7 +103,11 @@ func (w *Worker) Trigger() {
 func (w *Worker) Status() Status {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.status
+	s := w.status
+	s.Source = w.current
+	s.DefaultSource = w.defaultSource
+	s.Available = w.available
+	return s
 }
 
 func (w *Worker) syncOnce(ctx context.Context, force bool) {
@@ -116,28 +143,52 @@ func (w *Worker) syncOnce(ctx context.Context, force bool) {
 }
 
 func (w *Worker) sync(ctx context.Context, force bool) (guests int, unchanged bool, err error) {
-	meta, err := w.client.Meta(ctx)
+	name := w.currentSource()
+	body, err := w.sources[name].Fetch(ctx)
 	if err != nil {
-		return 0, false, err
-	}
-	if !force && meta.SHA256 == w.lastHash {
-		return 0, true, nil
-	}
-
-	body, err := w.client.Download(ctx)
-	if err != nil {
-		return 0, false, err
+		return 0, false, fmt.Errorf("%s: %w", name, err)
 	}
 	defer body.Close()
 
-	parsed, err := guestfile.Parse(io.LimitReader(body, maxFileSize))
+	data, err := io.ReadAll(io.LimitReader(body, maxFileSize+1))
 	if err != nil {
-		return 0, false, fmt.Errorf("parse: %w", err)
+		return 0, false, fmt.Errorf("%s: read: %w", name, err)
 	}
-	if err := w.importer.Import(ctx, parsed); err != nil {
-		return 0, false, fmt.Errorf("import: %w", err)
+	if len(data) > maxFileSize {
+		return 0, false, fmt.Errorf("%s: file is larger than %d MB", name, maxFileSize>>20)
 	}
 
-	w.lastHash = meta.SHA256
+	sum := sha256.Sum256(data)
+	hash := hex.EncodeToString(sum[:])
+	if !force && hash == w.lastHash {
+		return 0, true, nil
+	}
+
+	parsed, err := guestfile.Parse(bytes.NewReader(data))
+	if err != nil {
+		return 0, false, fmt.Errorf("%s: parse: %w", name, err)
+	}
+	if err := w.importer.Import(ctx, parsed); err != nil {
+		return 0, false, fmt.Errorf("%s: import: %w", name, err)
+	}
+
+	w.lastHash = hash
 	return len(parsed), false, nil
+}
+
+func (w *Worker) SetSource(name string) error {
+	if _, ok := w.sources[name]; !ok {
+		return fmt.Errorf("source %q isn't configured", name)
+	}
+	w.mu.Lock()
+	w.current = name
+	w.mu.Unlock()
+	w.Trigger()
+	return nil
+}
+
+func (w *Worker) currentSource() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.current
 }

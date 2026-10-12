@@ -2,10 +2,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"regexp"
 	"time"
-	"fmt"
 
 	"checkin/internal/cloudsync"
 )

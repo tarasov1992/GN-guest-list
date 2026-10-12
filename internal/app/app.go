@@ -39,10 +39,25 @@ func Run(ctx context.Context, cfg config.Config) error {
 	slog.Info("migrations applied", "count", len(results))
 	repo := repository.New(pool)
 
+	sources := map[string]cloudsync.Source{}
+	if cfg.YandexURL != "" {
+		sources[cloudsync.SourceYD] = cloudsync.NewYDClient(cfg.YandexURL)
+	}
+	if cfg.GoogleURL != "" {
+		gd, err := cloudsync.NewGDClient(cfg.GoogleURL)
+		if err != nil {
+			return fmt.Errorf("google source: %w", err)
+		}
+		sources[cloudsync.SourceGD] = gd
+	}
+	worker, err := cloudsync.NewWorker(sources, cfg.Source, repo, cfg.SyncInterval)
+	if err != nil {
+		return fmt.Errorf("sync worker: %w", err)
+	}
+
 	// The worker gets its own cancellable context, so it is stopped and waited for
 	// on every return path, before the deferred pool.Close runs.
 	workerCtx, cancelWorker := context.WithCancel(ctx)
-	worker := cloudsync.NewWorker(cloudsync.NewClient(cfg.YandexPublicURL), repo, cfg.SyncInterval)
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
@@ -52,7 +67,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		cancelWorker()
 		<-workerDone
 	}()
-	slog.Info("sync worker started", "interval", cfg.SyncInterval)
+	slog.Info("sync worker started", "source", cfg.Source, "interval", cfg.SyncInterval)
 
 	server := &http.Server{
 		Addr:        cfg.HTTPAddr,

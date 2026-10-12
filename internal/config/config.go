@@ -5,18 +5,23 @@ import (
 	"os"
 	"regexp"
 	"time"
+	"fmt"
+
+	"checkin/internal/cloudsync"
 )
 
 // doorSecretRe keeps the secret safe to use as a URL path segment and in mux patterns.
 var doorSecretRe = regexp.MustCompile(`^[A-Za-z0-9_-]{16,}$`)
 
 type Config struct {
-	DatabaseURL     string
-	HTTPAddr        string
-	AdminPassword   string
-	DoorSecret      string
-	YandexPublicURL string
-	SyncInterval    time.Duration
+	DatabaseURL   string
+	HTTPAddr      string
+	AdminPassword string
+	DoorSecret    string
+	YandexURL     string
+	GoogleURL     string
+	Source        string
+	SyncInterval  time.Duration
 }
 
 func Load() (Config, error) {
@@ -38,9 +43,21 @@ func Load() (Config, error) {
 	if !doorSecretRe.MatchString(cfg.DoorSecret) {
 		errs = append(errs, errors.New("DOOR_SECRET must be at least 16 characters of A-Z, a-z, 0-9, _ or -"))
 	}
-	cfg.YandexPublicURL = os.Getenv("YANDEX_PUBLIC_URL")
-	if cfg.YandexPublicURL == "" {
-		errs = append(errs, errors.New("YANDEX_PUBLIC_URL is not set"))
+	cfg.Source = os.Getenv("SOURCE")
+	switch cfg.Source {
+	case cloudsync.SourceYD, cloudsync.SourceGD:
+	case "":
+		errs = append(errs, errors.New("SOURCE is not set"))
+	default:
+		errs = append(errs, fmt.Errorf("SOURCE must be YD or GD, got %q", cfg.Source))
+	}
+	cfg.YandexURL = os.Getenv("YANDEX_URL")
+	if cfg.YandexURL == "" && cfg.Source == cloudsync.SourceYD {
+		errs = append(errs, errors.New("YANDEX_URL is not set (SOURCE=YD)"))
+	}
+	cfg.GoogleURL = os.Getenv("GOOGLE_URL")
+	if cfg.GoogleURL == "" && cfg.Source == cloudsync.SourceGD {
+		errs = append(errs, errors.New("GOOGLE_URL is not set (SOURCE=GD)"))
 	}
 	if v := os.Getenv("SYNC_INTERVAL"); v != "" {
 		d, err := time.ParseDuration(v)

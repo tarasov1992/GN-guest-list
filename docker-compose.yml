@@ -23,7 +23,9 @@ services:
       HTTP_ADDR: ":8080"
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       DOOR_SECRET: ${DOOR_SECRET}
-      YANDEX_PUBLIC_URL: ${YANDEX_PUBLIC_URL}
+      YANDEX_URL: ${YANDEX_URL:-}
+      GOOGLE_URL: ${GOOGLE_URL:-}
+      SOURCE: ${SOURCE}
       SYNC_INTERVAL: ${SYNC_INTERVAL:-1h}
       TZ: Europe/Moscow
     depends_on:

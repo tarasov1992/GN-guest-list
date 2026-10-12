@@ -1,9 +1,9 @@
 package httpapi
 
 import (
-	"net/http"
 	"crypto/sha256"
 	"crypto/subtle"
+	"net/http"
 )
 
 func (h *Handler) requireAdmin(next http.Handler) http.Handler {

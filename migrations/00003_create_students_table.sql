@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE table student_count (
     id boolean PRIMARY KEY DEFAULT true CHECK (id),
-    total integer DEFAULT 0 CHECK (total >= 0);
+    total integer NOT NULL DEFAULT 0 CHECK (total >= 0)
 );
 INSERT INTO student_count DEFAULT VALUES;
 

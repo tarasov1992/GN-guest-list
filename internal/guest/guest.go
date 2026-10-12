@@ -7,14 +7,18 @@ import (
 )
 
 type Priority string
+type Source string
 
 const (
 	PriorityRegular Priority = "regular"
 	PriorityVIP     Priority = "vip"
+	SourceFile      Source   = "file"
+	SourceWalkin    Source   = "walkin"
 )
 
 type Guest struct {
 	ID         int64
+	Source     Source
 	Surname    string
 	FirstName  string
 	Patronymic string

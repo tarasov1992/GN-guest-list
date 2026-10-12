@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
+	"checkin/internal/cloudsync"
 	"checkin/internal/config"
 	"checkin/internal/repository"
 	"checkin/internal/transport/httpapi"
-	"checkin/internal/ydimport"
 	"checkin/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,7 +42,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	// The worker gets its own cancellable context, so it is stopped and waited for
 	// on every return path, before the deferred pool.Close runs.
 	workerCtx, cancelWorker := context.WithCancel(ctx)
-	worker := ydimport.NewWorker(ydimport.NewClient(cfg.YandexPublicURL), repo, cfg.SyncInterval)
+	worker := cloudsync.NewWorker(cloudsync.NewClient(cfg.YandexPublicURL), repo, cfg.SyncInterval)
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)

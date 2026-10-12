@@ -13,6 +13,7 @@ import (
 )
 
 var ErrNotFound = errors.New("guest not found")
+var ErrAlrOnTheList = errors.New("guest is already on the list")
 
 type Repository struct {
 	pool *pgxpool.Pool
@@ -41,7 +42,7 @@ func (r *Repository) Import(ctx context.Context, guests []guest.Guest) error {
 		ON CONFLICT (full_name_key) DO UPDATE SET
 			surname = EXCLUDED.surname, first_name = EXCLUDED.first_name,
 			patronymic = EXCLUDED.patronymic, priority = EXCLUDED.priority,
-			removed = false
+			removed = false, source='file'
 	`
 	keys := make([]string, 0, len(guests))
 	batch := &pgx.Batch{}
@@ -64,7 +65,7 @@ func (r *Repository) Import(ctx context.Context, guests []guest.Guest) error {
 
 	softDeleteSQL := `
 		UPDATE guests SET removed = true
-		WHERE NOT removed AND full_name_key <> ALL($1)	
+		WHERE NOT removed AND full_name_key <> ALL($1) AND source='file'
 	`
 	_, err = tx.Exec(ctx, softDeleteSQL, keys)
 	if err != nil {
@@ -107,7 +108,7 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func (r *Repository) Search(ctx context.Context, name string) ([]guest.Guest, error) {
 	q := `
-		SELECT id, surname, first_name, patronymic, priority, checked_in, plus_one, removed
+		SELECT id, source, surname, first_name, patronymic, priority, checked_in, plus_one, removed
 		FROM guests
 		WHERE NOT removed AND full_name_key LIKE ALL($1)
 		ORDER BY surname, first_name, patronymic
@@ -130,7 +131,7 @@ func (r *Repository) Search(ctx context.Context, name string) ([]guest.Guest, er
 	var guests []guest.Guest
 	for rows.Next() {
 		var g guest.Guest
-		if err := rows.Scan(&g.ID, &g.Surname, &g.FirstName, &g.Patronymic,
+		if err := rows.Scan(&g.ID, &g.Source, &g.Surname, &g.FirstName, &g.Patronymic,
 			&g.Priority, &g.CheckedIn, &g.PlusOne, &g.Removed,
 		); err != nil {
 			return nil, fmt.Errorf("scan guest: %w", err)
@@ -148,7 +149,7 @@ func (r *Repository) Search(ctx context.Context, name string) ([]guest.Guest, er
 
 func (r *Repository) List(ctx context.Context) ([]guest.Guest, error) {
 	q := `
-		SELECT id, surname, first_name, patronymic, priority, checked_in, plus_one, removed
+		SELECT id, source, surname, first_name, patronymic, priority, checked_in, plus_one, removed
 		FROM guests
 		ORDER BY surname, first_name, patronymic
 	`
@@ -161,7 +162,7 @@ func (r *Repository) List(ctx context.Context) ([]guest.Guest, error) {
 	var guests []guest.Guest
 	for rows.Next() {
 		var g guest.Guest
-		if err := rows.Scan(&g.ID, &g.Surname, &g.FirstName, &g.Patronymic, &g.Priority, &g.CheckedIn, &g.PlusOne, &g.Removed); err != nil {
+		if err := rows.Scan(&g.ID, &g.Source, &g.Surname, &g.FirstName, &g.Patronymic, &g.Priority, &g.CheckedIn, &g.PlusOne, &g.Removed); err != nil {
 			return nil, fmt.Errorf("scan guest: %w", err)
 		}
 		guests = append(guests, g)
@@ -175,19 +176,71 @@ func (r *Repository) List(ctx context.Context) ([]guest.Guest, error) {
 	return guests, nil
 }
 
+func (r *Repository) AddWalkIn(ctx context.Context, g guest.Guest) (int64, error) {
+	q := `
+		INSERT INTO guests (surname, first_name, patronymic, priority, full_name_key, source, checked_in)
+		VALUES ($1, $2, $3, $4, $5, 'walkin', true)
+		ON CONFLICT (full_name_key) DO UPDATE SET
+			surname = EXCLUDED.surname, first_name = EXCLUDED.first_name, patronymic = EXCLUDED.patronymic,
+			priority = EXCLUDED.priority, source = 'walkin', removed = false, checked_in = true, plus_one = false
+		WHERE guests.removed
+		RETURNING id
+	`
+
+	var id int64
+	err := r.pool.QueryRow(ctx, q, g.Surname, g.FirstName, g.Patronymic, g.Priority, g.FullNameKey()).
+		Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrAlrOnTheList
+	}
+	if err != nil {
+		return 0, fmt.Errorf("add walkin: %w", err)
+	}
+	return id, nil
+}
+
+func (r *Repository) AddStudents(ctx context.Context, n int) (int, error) {
+	q := `
+		UPDATE student_count
+		SET total = total + $1
+		RETURNING total
+	`
+	var count int
+	err := r.pool.QueryRow(ctx, q, n).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("add students: %w", err)
+	}
+	return count, nil
+}
+
+func (r *Repository) SetStudents(ctx context.Context, n int) (int, error) {
+	q := `
+		UPDATE student_count
+		SET total = $1
+		RETURNING total
+	`
+	var count int
+	err := r.pool.QueryRow(ctx, q, n).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("set students: %w", err)
+	}
+	return count, nil
+}
+
 func (r *Repository) Counters(ctx context.Context) (Counters, error) {
 	q := `
 		SELECT
-  			count(*) FILTER (WHERE NOT removed AND priority = 'regular'),
-  			count(*) FILTER (WHERE NOT removed AND priority = 'vip'),
+  			count(*) FILTER (WHERE NOT removed AND priority = 'regular' AND source = 'file'),
+  			count(*) FILTER (WHERE NOT removed AND priority = 'vip' AND source = 'file'),
   			count(*) FILTER (WHERE checked_in AND priority = 'regular'),
   			count(*) FILTER (WHERE checked_in AND priority = 'vip'),
-  			count(*) FILTER (WHERE plus_one)
+  			count(*) FILTER (WHERE plus_one),
+			(SELECT total FROM student_count)
 		FROM guests
 	`
 	var c Counters
 	err := r.pool.QueryRow(ctx, q).Scan(&c.InvitedRegular, &c.InvitedVIP,
-		&c.ArrivedRegular, &c.ArrivedVIP, &c.PlusOnes)
+		&c.ArrivedRegular, &c.ArrivedVIP, &c.PlusOnes, &c.StudentCount)
 	if err != nil {
 		return Counters{}, fmt.Errorf("counters: %w", err)
 	}
@@ -200,4 +253,5 @@ type Counters struct {
 	ArrivedRegular int64
 	ArrivedVIP     int64
 	PlusOnes       int64
+	StudentCount   int64
 }

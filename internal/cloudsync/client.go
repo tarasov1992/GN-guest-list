@@ -1,4 +1,4 @@
-package ydimport
+package cloudsync
 
 import (
 	"context"

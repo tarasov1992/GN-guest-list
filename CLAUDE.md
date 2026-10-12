@@ -29,7 +29,7 @@ A small app for checking in ~500 guests at a one-off event. The guest list lives
 - `internal/repository`: Postgres access
 - `internal/transport/httpapi`: HTTP handlers, routes and the `requireAdmin` basic-auth middleware
 - `internal/app`: wiring, startup (migrations, server, sync loop) and shutdown
-- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters, `YANDEX_PUBLIC_URL`, `SYNC_INTERVAL` default `1h`). The admin basic-auth username is the fixed `admin`.
+- `internal/config`: configuration (`DATABASE_URL`, `HTTP_ADDR`, `ADMIN_PASSWORD` of at least 16 characters, `DOOR_SECRET`, `YANDEX_PUBLIC_URL` → to become `YANDEX_URL` + `GOOGLE_URL` + `SOURCE`, `SYNC_INTERVAL` default `1h`). The admin basic-auth username is the fixed `admin`.
 - `migrations/`: goose SQL migrations, embedded via `migrations.FS`
 - `web/`: templates and static files (htmx), embedded via `web.FS`
 
@@ -59,17 +59,22 @@ The real file contains guests' personal data (phones, emails) and must never be 
 
 ## Sync worker
 
-The file is shared by **public link**, so the worker uses Yandex Disk's public-resources API (`cloud-api.yandex.net/v1/disk/public/resources`) with no auth. The link goes in `.env` and is treated as a secret.
+The file is shared by **public link**, on **Yandex Disk or Google Drive**; no auth either way. The link is treated as a secret.
 
-1. Periodically (configurable interval, default hourly) fetch the file's **metadata** via the Yandex Disk API (`md5`/`sha256`, `modified`).
-2. Download only if the hash differs from the last stored hash.
+- **Yandex:** `disk.yandex.ru/i/…` or `yadi.sk/…` links, via the public-resources API (`cloud-api.yandex.net/v1/disk/public/resources/download`).
+- **Google:** an uploaded `.xlsx` (`drive.google.com/file/d/<ID>/…` → `drive.google.com/uc?export=download&id=<ID>`) or a native Google Sheet (`docs.google.com/spreadsheets/d/<ID>/…` → `…/export?format=xlsx`). An HTML response means the file isn't public; report that clearly.
+- **Configuring and switching the source:** `.env` holds both links (`YANDEX_URL`, `GOOGLE_URL`; at least one required) and the default `SOURCE` (`yandex` | `google`, defaulting to the only link if just one is set). The admin panel switches between the configured sources at runtime; there's no free-form URL field, so the server only ever fetches links from `.env`. The switch is **in memory only**: after a restart the app uses `SOURCE` from `.env` again, and the admin panel says so next to the current source. To make a switch permanent, change `SOURCE` in `.env` too. Switching triggers a sync immediately. No DB table for the source.
+
+Each run:
+
+1. Download the file (~75 KB) and hash its bytes (`sha256`). There's no metadata call, so both providers work the same way; at a 5-minute interval that's about 1 MB/hour.
+2. Stop if the hash equals the last imported one.
 3. Parse and **upsert** all rows in one transaction (`INSERT ... ON CONFLICT (full_name_key) DO UPDATE`). Idempotent, safe to re-run.
-4. The upsert must **never touch check-in columns** (`checked_in`, `plus_one`).
-5. The admin panel gets a "sync now" button, and shows the last sync error.
+4. The upsert must **never touch check-in columns** (`checked_in`, `plus_one`). It sets `source = 'file'`, so a walk-in who later appears in the file becomes a file guest.
+5. Soft-delete only rows with `source = 'file'` that are missing from the file. Walk-ins are never removed by a sync.
+6. The admin panel has a "sync now" button, and shows the last sync result or error.
 
-Downloader and importer can be one loop; no queue is needed between them.
-
-Implementation (`internal/ydimport`): `Client` (`Meta`, `Download`) and `Worker`. The worker syncs once at startup, then every `SYNC_INTERVAL`, and on "sync now" (`POST /admin/sync`, which skips the hash check). The last imported hash is kept in memory, so a restart re-imports once (harmless, `Import` is idempotent). A failed sync is logged and shown in the admin panel, and never stops the loop. `app` stops and waits for the worker before closing the pool. The container runs with `TZ=Europe/Moscow`.
+Implementation: a `Source` interface (`Fetch(ctx) (io.ReadCloser, error)`) with Yandex and Google implementations, and a `Worker` (`internal/ydimport`, to be renamed now that it isn't Yandex-only). The worker syncs once at startup, then every `SYNC_INTERVAL`, on "sync now" (`POST /admin/sync`, which skips the hash check), and when the source changes. It reads the current source on each run. The last imported hash is kept in memory, so a restart re-imports once (harmless, `Import` is idempotent). A failed sync is logged and shown in the admin panel, and never stops the loop. `app` stops and waits for the worker before closing the pool. The container runs with `TZ=Europe/Moscow`.
 
 ## Guest identity
 
@@ -81,7 +86,7 @@ Implementation (`internal/ydimport`): `Client` (`Meta`, `Download`) and `Worker`
 
 ## Data model
 
-One `guests` table (see `migrations/00001_init.sql`):
+`guests` (see `migrations/00001_init.sql`, `00002`):
 
 - `id`: identity primary key
 - `surname`, `first_name`, `patronymic`: as in the file; `first_name` and `patronymic` default to `''`, never NULL
@@ -90,6 +95,9 @@ One `guests` table (see `migrations/00001_init.sql`):
 - `checked_in` boolean
 - `plus_one` boolean. Anyone may bring at most one extra guest. `CHECK (checked_in OR NOT plus_one)`.
 - `removed` boolean (soft delete)
+- `source`: `file` (from the spreadsheet) or `walkin` (added at the door). Existing rows default to `file`.
+
+`student_count` (`00003`): a single row (`id boolean PRIMARY KEY DEFAULT true CHECK (id)`), `total integer NOT NULL DEFAULT 0 CHECK (total >= 0)`, inserted by the migration. Students are an anonymous count, not rows in `guests`. Updates are atomic: `UPDATE ... SET total = total + $1 RETURNING total`.
 
 **No check-in timestamps and no audit log.** Explicitly not needed.
 
@@ -111,10 +119,23 @@ One `guests` table (see `migrations/00001_init.sql`):
   - If `previous` equals the sent state, show "already checked in". If `previous` differs from what the row showed before the tap, show "updated on another device".
 - Known edge case: a stale row can overwrite another device's change (e.g. remove a +1). The window is the few seconds between a search and a tap, and the "updated on another device" note makes it visible. A compare-and-set (`409` on mismatch) is the full fix, only worth it with many door devices.
 
+### Walk-ins (door)
+
+- «Нет в списке? Добавить»: surname and first name required, patronymic optional, **priority selectable** (regular / VIP).
+- Creates a `guests` row with `source = 'walkin'`, already checked in. It's searchable like anyone else.
+- A name whose normalized key already exists is rejected with a clear message (the person is already on the list; search for them instead).
+
+### Students (door)
+
+- An anonymous count, arriving in batches. The door has a stepper (`[−] N [+]`, the number editable) and «Добавить студентов». The response shows the new total.
+- **The door can only increment.** Corrections (including a double-count from a retry after a timeout, since increments aren't idempotent) are done in the admin panel.
+
 ## Admin panel
 
-- Full searchable guest list with priority and check-in state
-- Counters computed on read from Postgres: total regular, total VIP, total overall (including +1s)
+- Full searchable guest list with priority and check-in state; walk-ins are marked
+- Counters computed on read from Postgres: regular and VIP (arrived / invited), +1s, students, and «в зале» = arrived guests + +1s + students. No "seats remaining" for now.
+- Student count correction (the only place it can go down).
+- Source switch: shows the current source and whether it differs from `.env`'s `SOURCE` (and so reverts on restart); switching between the configured sources syncs immediately.
 - Protected by basic auth (username `admin`, `ADMIN_PASSWORD`), since it exposes everyone's full name.
 - The door UI has no password. It lives under a secret path, `/d/<DOOR_SECRET>/`, and so do its search and check-in endpoints (the templates use relative URLs). `/` returns 404, so scanners hitting the IP find nothing. Staff get the full link.
 - Live updates optional (polling or SSE)

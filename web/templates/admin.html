@@ -13,15 +13,41 @@
           hx-post="/admin/sync" hx-target="#sync-msg" hx-disabled-elt="this">Синхронизировать</button>
 </header>
 <p class="subbar"><span id="updated" class="updated"></span> <span id="sync-msg" class="updated"></span></p>
+
+{{/* Outside the polled #overview, so typing here isn't wiped by the 5-second refresh. */}}
+<section class="admin-tools">
+  <form class="fix card" hx-post="/admin/students" hx-target="#students-msg"
+        hx-disabled-elt="find button[type=submit]">
+    <label for="students-total">Исправить число студентов</label>
+    <div class="fix-row">
+      <input id="students-total" type="number" name="total" min="0" inputmode="numeric" required placeholder="точное число">
+      <button type="submit" class="btn">Сохранить</button>
+    </div>
+    <span id="students-msg" class="updated"></span>
+  </form>
+</section>
+
 <main id="overview" hx-get="/admin/overview" hx-trigger="load, every 5s" hx-swap="innerHTML">
   <p class="hint">Загрузка…</p>
 </main>
+<div id="toast" class="toast" hidden></div>
 </body>
 </html>
 {{end}}
 
 {{define "overview"}}
 <section class="sync{{if .Sync.Err}} failed{{end}}">
+  <div class="source">
+    Источник: <strong>{{sourceName .Sync.Source}}</strong>
+    {{if ne .Sync.Source .Sync.DefaultSource}}
+      <small>(переключено вручную; после перезапуска будет {{sourceName .Sync.DefaultSource}})</small>
+    {{end}}
+    {{range .Sync.Available}}{{if ne . $.Sync.Source}}
+      <button class="btn small" type="button"
+              hx-post="/admin/source" hx-vals='{"source": "{{.}}"}' hx-target="#sync-msg"
+              hx-confirm="Переключить источник на {{sourceName .}}? Список гостей будет загружен оттуда.">Переключить на {{sourceName .}}</button>
+    {{end}}{{end}}
+  </div>
   {{if .Sync.Running}}
     <strong>Синхронизация идёт…</strong>
   {{else if .Sync.LastRun.IsZero}}
@@ -55,6 +81,10 @@
     <span class="num">{{.C.PlusOnes}}</span>
     <span class="label">+1</span>
   </div>
+  <div class="counter">
+    <span class="num">{{.C.StudentCount}}</span>
+    <span class="label">студенты</span>
+  </div>
 </section>
 <table class="list">
   <thead>
@@ -66,6 +96,7 @@
       <td>
         <span class="surname">{{.Surname}}</span> {{.FirstName}} {{.Patronymic}}
         {{if eq .Priority "vip"}}<span class="badge">VIP</span>{{end}}
+        {{if eq .Source "walkin"}}<span class="badge muted">на входе</span>{{end}}
         {{if .Removed}}<span class="badge muted">удалён</span>{{end}}
       </td>
       <td class="status">{{if .PlusOne}}пришёл +1{{else if .CheckedIn}}пришёл{{else}}—{{end}}</td>
@@ -77,4 +108,4 @@
 </table>
 {{end}}
 
-{{define "sync-queued"}}синхронизация запущена{{end}}
+{{define "admin-note"}}{{.}}{{end}}

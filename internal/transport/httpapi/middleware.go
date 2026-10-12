@@ -27,3 +27,16 @@ func (h *Handler) requireAdmin(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// requireHTMX guards admin POSTs against cross-site requests: the browser remembers
+// the admin's basic-auth credentials, but a form on another site can't set this
+// header (that would need a CORS preflight, which we never allow).
+func requireHTMX(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("HX-Request") != "true" {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

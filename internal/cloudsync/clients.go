@@ -89,7 +89,7 @@ func NewGDClient(link string) (*GDClient, error) {
 		return nil, fmt.Errorf("GD client construction: %w", err)
 	}
 	return &GDClient{
-		http:        &http.Client{Timeout: 30 * time.Second},
+		http:        &http.Client{Timeout: 2 * time.Minute},
 		downloadURL: downloadURL,
 	}, nil
 }

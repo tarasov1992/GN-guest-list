@@ -113,7 +113,7 @@ func parsePriority(s string) (guest.Priority, error) {
 	switch strings.ToLower(s) {
 	case "vip":
 		return guest.PriorityVIP, nil
-	case "обычный":
+	case "", "обычный":
 		return guest.PriorityRegular, nil
 	}
 	return "", fmt.Errorf("unknown priority %q", s)

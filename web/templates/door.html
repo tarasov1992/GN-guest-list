@@ -8,6 +8,9 @@
 <header class="hero">
   <h1 class="title">Под Двуглавым Орлом</h1>
 </header>
+<section class="tools">
+{{template "students" .Students}}
+</section>
 <div class="bar bar-center">
   <input id="q" class="search" type="search" name="q"
          placeholder="Фамилия или имя гостя"
@@ -19,7 +22,7 @@
          hx-sync="this:replace">
 </div>
 <main id="results" aria-live="polite">
-{{template "results" .}}
+{{template "results" .Results}}
 </main>
 <div id="toast" class="toast" hidden></div>
 </body>
@@ -29,11 +32,14 @@
 {{define "results"}}
 {{if not .Query}}
   <p class="hint">Начните вводить фамилию или имя гостя</p>
-{{else if not .Guests}}
-  <p class="hint">Никого не найдено по запросу «{{.Query}}»</p>
 {{else}}
-  {{range .Guests}}{{template "row" .}}{{end}}
-  {{if .Truncated}}<p class="hint">Показаны первые {{len .Guests}}, уточните запрос</p>{{end}}
+  {{if not .Guests}}
+    <p class="hint">Никого не найдено по запросу «{{.Query}}»</p>
+  {{else}}
+    {{range .Guests}}{{template "row" .}}{{end}}
+    {{if .Truncated}}<p class="hint">Показаны первые {{len .Guests}}, уточните запрос</p>{{end}}
+  {{end}}
+  {{template "walkin" .Walkin}}
 {{end}}
 {{end}}
 
@@ -43,6 +49,7 @@
     <span class="surname">{{.Surname}}</span>
     <span class="given">{{.FirstName}} {{.Patronymic}}</span>
     {{if eq .Priority "vip"}}<span class="badge">VIP</span>{{end}}
+    {{if eq .Source "walkin"}}<span class="badge muted">на входе</span>{{end}}
   </div>
   {{template "state" .}}
 </div>
@@ -74,5 +81,55 @@
 {{define "state-gone"}}
 <div class="state">
   <p class="msg warn">Гостя больше нет в списке</p>
+</div>
+{{end}}
+
+{{/* Students: an anonymous count; the door can only add. */}}
+{{define "students"}}
+<form class="students card" hx-post="students" hx-target="this" hx-swap="outerHTML"
+      hx-disabled-elt="find button[type=submit]" hx-indicator="this">
+  <div class="students-row">
+    <select class="count" name="n" aria-label="Сколько студентов">
+      {{range studentOptions}}<option value="{{.}}"{{if eq . $.N}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+    <button type="submit" class="btn">Добавить студентов</button>
+  </div>
+  <p class="students-total">Студентов всего: <strong>{{.Total}}</strong> <span class="cog" aria-hidden="true">⚙</span></p>
+  {{with .Msg}}<p class="msg {{$.MsgClass}}">{{.}}</p>{{end}}
+</form>
+{{end}}
+
+{{/* Walk-ins: a guest who isn't on the list. Opens by itself when the search finds nobody. */}}
+{{define "walkin"}}
+<details class="walkin card"{{if .Open}} open{{end}}>
+  <summary>Нет в списке? Добавить гостя</summary>
+  <form hx-post="walkins" hx-target="closest .walkin" hx-swap="outerHTML"
+        hx-disabled-elt="find button[type=submit]" hx-indicator="this">
+    <label class="field">
+      <span>Фамилия</span>
+      <input name="surname" value="{{.Surname}}" required autocomplete="off" autocapitalize="words">
+    </label>
+    <label class="field">
+      <span>Имя</span>
+      <input name="first_name" value="{{.FirstName}}" required autocomplete="off" autocapitalize="words">
+    </label>
+    <label class="field">
+      <span>Отчество <small>(необязательно)</small></span>
+      <input name="patronymic" value="{{.Patronymic}}" autocomplete="off" autocapitalize="words">
+    </label>
+    <fieldset class="segmented">
+      <legend>Статус</legend>
+      <label><input type="radio" name="priority" value="regular"{{if ne .Priority "vip"}} checked{{end}}><span>Обычный</span></label>
+      <label><input type="radio" name="priority" value="vip"{{if eq .Priority "vip"}} checked{{end}}><span>VIP</span></label>
+    </fieldset>
+    {{with .Err}}<p class="msg error">{{.}}</p>{{end}}
+    <button type="submit" class="btn">Добавить и отметить <span class="cog" aria-hidden="true">⚙</span></button>
+  </form>
+</details>
+{{end}}
+
+{{define "walkin-added"}}
+<div class="walkin added">
+{{template "row" .}}
 </div>
 {{end}}

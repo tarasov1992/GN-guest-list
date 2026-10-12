@@ -53,7 +53,7 @@ The real file contains guests' personal data (phones, emails) and must never be 
 - Cell values are trimmed. Names are stored as written in the file; only the key is normalized.
 - Rows where surname, first name and patronymic are all empty are skipped.
 - A missing surname is an error. An empty first name or patronymic is allowed.
-- An unknown `Приоритет` value is an error.
+- An empty priority cell means `regular` (the live Google sheet had one, and a single blank cell shouldn't block every sync). A non-empty value other than `VIP`/`Обычный` is still an error.
 - Duplicate full-name keys are an error that names both rows.
 - Errors carry the Excel row number. All errors are collected and returned together (`errors.Join`). If there are any errors, no guests are returned and the sync fails, leaving the database as it was.
 
@@ -127,7 +127,7 @@ Implementation: a `Source` interface (`Fetch(ctx) (io.ReadCloser, error)`) with 
 
 ### Students (door)
 
-- An anonymous count, arriving in batches. The door has a stepper (`[−] N [+]`, the number editable) and «Добавить студентов». The response shows the new total.
+- An anonymous count, arriving in batches. The door has a dropdown (a native `<select>`, which opens the phone's own picker: 1–30, then 35–100 by 5, then 110–200 by 10) and «Добавить студентов». The server accepts any 1–200. The response shows the new total.
 - **The door can only increment.** Corrections (including a double-count from a retry after a timeout, since increments aren't idempotent) are done in the admin panel.
 
 ## Admin panel

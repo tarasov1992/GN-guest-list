@@ -204,7 +204,8 @@ main {
   color: var(--muted);
   margin-left: auto;
 }
-.state.htmx-request .cog {
+.htmx-request .cog,
+.htmx-request.cog {
   visibility: visible;
   animation: spin 1s linear infinite;
 }
@@ -332,3 +333,142 @@ fieldset:disabled .box { cursor: progress; }
 .list .status { white-space: nowrap; color: var(--muted); }
 .list tr.removed td { color: var(--muted); text-decoration: line-through; }
 .list tr.removed .badge { text-decoration: none; }
+
+/* Shared card look for the door tools and admin forms */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.btn.small {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+/* Door: students counter, between the title and the search bar */
+.tools {
+  max-width: 568px;
+  margin: 0 auto;
+  padding: 4px 24px 0;
+}
+.students-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* Native dropdown: opens the phone's own picker. 18px keeps iOS from zooming in. */
+.count {
+  height: 48px;
+  min-width: 96px;
+  padding: 0 36px 0 14px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  background-color: var(--surface-solid);
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: right 18px center, right 12px center;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.count:focus { outline: none; border-color: var(--accent); }
+.students .btn { flex: 1 1 auto; }
+.students-total {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.students-total strong { color: var(--text); }
+.students-total .cog { margin-left: 6px; font-size: 16px; }
+
+/* Door: walk-in form, after the search results */
+.walkin { margin-top: 6px; margin-bottom: 10px; }
+.walkin summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.walkin form { margin-top: 10px; display: grid; gap: 10px; }
+.walkin.added { background: none; border: 0; padding: 0; }
+.walkin .btn { width: 100%; }
+.walkin .btn .cog { margin-left: 6px; font-size: 16px; color: inherit; }
+
+.field { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+.field input,
+.fix input {
+  height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 17px;
+  color: var(--text);
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+}
+.field input:focus,
+.fix input:focus { border-color: var(--accent); }
+
+.segmented {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.segmented legend {
+  float: left;
+  width: 100%;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.segmented label { flex: 1; }
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+.segmented span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.segmented input:checked + span {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); }
+
+/* Admin: tools above the polled overview */
+.admin-tools {
+  max-width: 760px;
+  margin: 8px auto 0;
+  padding: 0 16px;
+}
+.fix { display: grid; gap: 8px; font-size: 15px; }
+.fix-row { display: flex; gap: 10px; }
+.fix-row input { flex: 1; min-width: 0; }
+
+.source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+.source small { color: var(--warn); }

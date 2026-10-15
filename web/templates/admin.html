@@ -96,6 +96,7 @@
       <td>
         <span class="surname">{{.Surname}}</span> {{.FirstName}} {{.Patronymic}}
         {{if eq .Priority "vip"}}<span class="badge">VIP</span>{{end}}
+        {{if .SpcTag}}<span class="badge spc">СПЦ</span>{{end}}
         {{if eq .Source "walkin"}}<span class="badge muted">на входе</span>{{end}}
         {{if .Removed}}<span class="badge muted">удалён</span>{{end}}
       </td>

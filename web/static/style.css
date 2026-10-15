@@ -162,6 +162,7 @@ main {
   vertical-align: 2px;
 }
 .badge.muted { color: var(--muted); background: var(--info-bg); }
+.badge.spc { color: #8fc7e8; background: rgba(143, 199, 232, 0.15); }
 
 .controls {
   display: flex;

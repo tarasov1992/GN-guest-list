@@ -162,6 +162,7 @@ type walkinForm struct {
 	FirstName  string
 	Patronymic string
 	Priority   guest.Priority
+	SpcTag     bool
 	Err        string
 }
 
@@ -308,6 +309,7 @@ func (h *Handler) addWalkIn(w http.ResponseWriter, r *http.Request) {
 		FirstName:  strings.TrimSpace(r.PostFormValue("first_name")),
 		Patronymic: strings.TrimSpace(r.PostFormValue("patronymic")),
 		Priority:   guest.Priority(r.PostFormValue("priority")),
+		SpcTag:     r.PostFormValue("spc") == "true",
 	}
 	if f.Priority != guest.PriorityVIP {
 		f.Priority = guest.PriorityRegular
@@ -324,6 +326,7 @@ func (h *Handler) addWalkIn(w http.ResponseWriter, r *http.Request) {
 		FirstName:  f.FirstName,
 		Patronymic: f.Patronymic,
 		Priority:   f.Priority,
+		SpcTag:     f.SpcTag,
 		CheckedIn:  true,
 	}
 	id, err := h.repo.AddWalkIn(r.Context(), g)

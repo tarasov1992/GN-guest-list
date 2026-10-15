@@ -49,6 +49,7 @@
     <span class="surname">{{.Surname}}</span>
     <span class="given">{{.FirstName}} {{.Patronymic}}</span>
     {{if eq .Priority "vip"}}<span class="badge">VIP</span>{{end}}
+    {{if .SpcTag}}<span class="badge spc">СПЦ</span>{{end}}
     {{if eq .Source "walkin"}}<span class="badge muted">на входе</span>{{end}}
   </div>
   {{template "state" .}}
@@ -122,6 +123,10 @@
       <label><input type="radio" name="priority" value="regular"{{if ne .Priority "vip"}} checked{{end}}><span>Обычный</span></label>
       <label><input type="radio" name="priority" value="vip"{{if eq .Priority "vip"}} checked{{end}}><span>VIP</span></label>
     </fieldset>
+    <label class="box">
+      <input type="checkbox" name="spc" value="true"{{if .SpcTag}} checked{{end}}>
+      <span>Подворье СПЦ</span>
+    </label>
     {{with .Err}}<p class="msg error">{{.}}</p>{{end}}
     <button type="submit" class="btn">Добавить и отметить <span class="cog" aria-hidden="true">⚙</span></button>
   </form>

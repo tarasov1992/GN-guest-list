@@ -16,8 +16,12 @@ const (
 	colFirstName  = "Имя"
 	colPatronymic = "Отчество"
 	colPriority   = "Приоритет"
+	colInviting   = "Приглашающий"
 	// colPriorityAlt is the same column under the name the live file uses.
 	colPriorityAlt = "Статус"
+
+	// Подворье СПЦ should have a special tag
+	spcTag = "Подворье СПЦ"
 )
 
 func Parse(r io.Reader) ([]guest.Guest, error) {
@@ -86,7 +90,9 @@ func Parse(r io.Reader) ([]guest.Guest, error) {
 			continue
 		}
 		g.Priority = priority
-
+		if i, ok := cols[colInviting]; ok {
+			g.SpcTag = strings.EqualFold(cell(row, i), spcTag)
+		}
 		guests = append(guests, g)
 		fullNameKey := g.FullNameKey()
 		if r, ok := nameKeyRows[fullNameKey]; !ok {

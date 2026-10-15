@@ -37,11 +37,11 @@ func (r *Repository) Import(ctx context.Context, guests []guest.Guest) error {
 	defer tx.Rollback(ctx)
 
 	upsertSQL := `
-		INSERT INTO guests (surname, first_name, patronymic, priority, full_name_key)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO guests (surname, first_name, patronymic, priority, full_name_key, spc_tag)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (full_name_key) DO UPDATE SET
 			surname = EXCLUDED.surname, first_name = EXCLUDED.first_name,
-			patronymic = EXCLUDED.patronymic, priority = EXCLUDED.priority,
+			patronymic = EXCLUDED.patronymic, priority = EXCLUDED.priority, spc_tag = EXCLUDED.spc_tag,
 			removed = false, source='file'
 	`
 	keys := make([]string, 0, len(guests))
@@ -49,7 +49,7 @@ func (r *Repository) Import(ctx context.Context, guests []guest.Guest) error {
 	for _, g := range guests {
 		key := g.FullNameKey()
 		keys = append(keys, key)
-		batch.Queue(upsertSQL, g.Surname, g.FirstName, g.Patronymic, g.Priority, key)
+		batch.Queue(upsertSQL, g.Surname, g.FirstName, g.Patronymic, g.Priority, key, g.SpcTag)
 	}
 
 	br := tx.SendBatch(ctx, batch)
@@ -108,7 +108,7 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func (r *Repository) Search(ctx context.Context, name string) ([]guest.Guest, error) {
 	q := `
-		SELECT id, source, surname, first_name, patronymic, priority, checked_in, plus_one, removed
+		SELECT id, source, surname, first_name, patronymic, priority, checked_in, plus_one, spc_tag, removed
 		FROM guests
 		WHERE NOT removed AND full_name_key LIKE ALL($1)
 		ORDER BY surname, first_name, patronymic
@@ -132,7 +132,7 @@ func (r *Repository) Search(ctx context.Context, name string) ([]guest.Guest, er
 	for rows.Next() {
 		var g guest.Guest
 		if err := rows.Scan(&g.ID, &g.Source, &g.Surname, &g.FirstName, &g.Patronymic,
-			&g.Priority, &g.CheckedIn, &g.PlusOne, &g.Removed,
+			&g.Priority, &g.CheckedIn, &g.PlusOne, &g.SpcTag, &g.Removed,
 		); err != nil {
 			return nil, fmt.Errorf("scan guest: %w", err)
 		}
@@ -149,7 +149,7 @@ func (r *Repository) Search(ctx context.Context, name string) ([]guest.Guest, er
 
 func (r *Repository) List(ctx context.Context) ([]guest.Guest, error) {
 	q := `
-		SELECT id, source, surname, first_name, patronymic, priority, checked_in, plus_one, removed
+		SELECT id, source, surname, first_name, patronymic, priority, checked_in, plus_one, spc_tag, removed
 		FROM guests
 		ORDER BY surname, first_name, patronymic
 	`
@@ -162,7 +162,7 @@ func (r *Repository) List(ctx context.Context) ([]guest.Guest, error) {
 	var guests []guest.Guest
 	for rows.Next() {
 		var g guest.Guest
-		if err := rows.Scan(&g.ID, &g.Source, &g.Surname, &g.FirstName, &g.Patronymic, &g.Priority, &g.CheckedIn, &g.PlusOne, &g.Removed); err != nil {
+		if err := rows.Scan(&g.ID, &g.Source, &g.Surname, &g.FirstName, &g.Patronymic, &g.Priority, &g.CheckedIn, &g.PlusOne, &g.SpcTag, &g.Removed); err != nil {
 			return nil, fmt.Errorf("scan guest: %w", err)
 		}
 		guests = append(guests, g)
@@ -178,17 +178,17 @@ func (r *Repository) List(ctx context.Context) ([]guest.Guest, error) {
 
 func (r *Repository) AddWalkIn(ctx context.Context, g guest.Guest) (int64, error) {
 	q := `
-		INSERT INTO guests (surname, first_name, patronymic, priority, full_name_key, source, checked_in)
-		VALUES ($1, $2, $3, $4, $5, 'walkin', true)
+		INSERT INTO guests (surname, first_name, patronymic, priority, full_name_key, source, checked_in, spc_tag)
+		VALUES ($1, $2, $3, $4, $5, 'walkin', true, $6)
 		ON CONFLICT (full_name_key) DO UPDATE SET
 			surname = EXCLUDED.surname, first_name = EXCLUDED.first_name, patronymic = EXCLUDED.patronymic,
-			priority = EXCLUDED.priority, source = 'walkin', removed = false, checked_in = true, plus_one = false
+			priority = EXCLUDED.priority, spc_tag = EXCLUDED.spc_tag, source = 'walkin', removed = false, checked_in = true, plus_one = false
 		WHERE guests.removed
 		RETURNING id
 	`
 
 	var id int64
-	err := r.pool.QueryRow(ctx, q, g.Surname, g.FirstName, g.Patronymic, g.Priority, g.FullNameKey()).
+	err := r.pool.QueryRow(ctx, q, g.Surname, g.FirstName, g.Patronymic, g.Priority, g.FullNameKey(), g.SpcTag).
 		Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrAlrOnTheList

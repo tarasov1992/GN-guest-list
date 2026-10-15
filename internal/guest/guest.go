@@ -25,6 +25,7 @@ type Guest struct {
 	CheckedIn  bool
 	Priority   Priority
 	PlusOne    bool
+	SpcTag     bool
 	Removed    bool
 }
 

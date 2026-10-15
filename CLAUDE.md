@@ -96,6 +96,7 @@ Implementation: a `Source` interface (`Fetch(ctx) (io.ReadCloser, error)`) with 
 - `plus_one` boolean. Anyone may bring at most one extra guest. `CHECK (checked_in OR NOT plus_one)`.
 - `removed` boolean (soft delete)
 - `source`: `file` (from the spreadsheet) or `walkin` (added at the door). Existing rows default to `file`.
+- `spc_tag` boolean (`00004`, `NOT NULL DEFAULT false`): the guest was invited by «Подворье СПЦ». Set from the optional «Приглашающий» column (case-insensitive exact match; a missing column means nobody is tagged), or by a checkbox when adding a walk-in. Display-only: a «СПЦ» badge on the door and in the admin list, no counter. Not part of `full_name_key`.
 
 `student_count` (`00003`): a single row (`id boolean PRIMARY KEY DEFAULT true CHECK (id)`), `total integer NOT NULL DEFAULT 0 CHECK (total >= 0)`, inserted by the migration. Students are an anonymous count, not rows in `guests`. Updates are atomic: `UPDATE ... SET total = total + $1 RETURNING total`.
 
